@@ -1,7 +1,6 @@
 import os
 from config import args
 from util import find_gpus
-
 os.environ['CUDA_VISIBLE_DEVICES'] = find_gpus(nums=args.num_gpus) # 必须在import torch前面
 
 import logging
@@ -12,7 +11,6 @@ from models.finetune_model import ClassificationModel
 from data.category_id_map import CATEGORY_ID_LIST
 from data.data_helper import create_dataloaders
 from util import setup_seed, setup_logging, build_optimizer, evaluate
-
 
 def validate(model, val_dataloader):
     model.eval()
@@ -40,11 +38,11 @@ def validate(model, val_dataloader):
 def train_and_validate():
     train_dataloader, val_dataloader = create_dataloaders(args)
 
-    model = ClassificationModel(len(CATEGORY_ID_LIST))
+    model = ClassificationModel(len(CATEGORY_ID_LIST)).cuda()
     restore_checkpoint(model, args.ckpt_file)
     optimizer, scheduler = build_optimizer(args, model)
     if args.num_gpus > 1:
-        model = nn.DataParallel(model.cuda())
+        model = nn.DataParallel(model)
 
     step = 0
     best_score = args.best_score
@@ -81,7 +79,11 @@ def train_and_validate():
         mean_f1 = results['mean_f1']
         if mean_f1 > best_score:
             best_score = mean_f1
-            torch.save({'epoch': epoch, 'model_state_dict': model.module.state_dict(), 'mean_f1': mean_f1},
+            if args.num_gpus > 1:
+                torch.save({'epoch': epoch, 'model_state_dict': model.module.state_dict(), 'mean_f1': mean_f1},
+                       f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
+            else:
+                torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'mean_f1': mean_f1},
                        f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
 
 

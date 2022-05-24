@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument('--test_zip_feats', type=str, default='/home/data_ti6_d/panmz/weixin_data/zip_feats/test_a.zip')
     parser.add_argument('--test_output_csv', type=str, default='./data/result.csv')
     parser.add_argument('--val_ratio', default=0.1, type=float, help='split 10 percentages of training data as validation')
-    parser.add_argument('--batch_size', default=64, type=int, help="use for training duration per worker")
+    parser.add_argument('--batch_size', default=256, type=int, help="use for training duration per worker")
     parser.add_argument('--val_batch_size', default=256, type=int, help="use for validation duration per worker")
     parser.add_argument('--test_batch_size', default=256, type=int, help="use for testing duration per worker")
     parser.add_argument('--prefetch', default=16, type=int, help="use for training duration per worker")
@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument('--best_score', default=0.5, type=float, help='save checkpoint if mean_f1 > best_score')
 
     # ========================= Learning Configs ==========================
-    parser.add_argument('--max_epochs', type=int, default=20, help='How many epochs')
+    parser.add_argument('--max_epochs', type=int, default=10, help='How many epochs')
     parser.add_argument('--max_steps', default=50000, type=int, metavar='N', help='number of total epochs to run')
     parser.add_argument('--print_steps', type=int, default=20, help="Number of steps to log training metrics.")
     parser.add_argument('--warmup_steps', default=1000, type=int, help="warm ups for parameters not in bert or vit")
@@ -39,7 +39,7 @@ def parse_args():
     # ========================== Title BERT =============================
     parser.add_argument('--bert_dir', type=str, default='hfl/chinese-macbert-base')
     parser.add_argument('--bert_cache', type=str, default='data/cache')
-    parser.add_argument('--bert_seq_length', type=int, default=50)
+    parser.add_argument('--bert_seq_length', type=int, default=80)
     parser.add_argument('--bert_learning_rate', type=float, default=3e-5)
     parser.add_argument('--bert_warmup_steps', type=int, default=5000)
     parser.add_argument('--bert_max_steps', type=int, default=30000)
@@ -57,9 +57,9 @@ def parse_args():
     parser.add_argument('--fc_size', type=int, default=512, help="linear size before final linear")
 
     # ========================== Pretrain =================================
-    parser.add_argument('--pretrain-lr', type=float, default=1e-4)
-    parser.add_argument('--num-gpus', type=int, default=4)
-    parser.add_argument('--from-scratch', action='store_true')
+    parser.add_argument('--pretrain_lr', type=float, default=1e-4)
+    parser.add_argument('--num_gpus', type=int, default=4)
+    parser.add_argument('--from_scratch', action='store_true')
     return parser.parse_args()
 
 args = parse_args()

@@ -89,7 +89,12 @@ class LXRTDataset(Dataset):
         if random.random() < 0.5:
             annotation = self.anns[random.randint(0, len(self.anns) - 1)]
             is_matched = 0
-        masked_input_ids, mlm_labels, mask = self.proc_text(annotation['title'])
+
+        sentence = annotation['title'] + "[SEP]" + annotation['asr']
+        for ocr in annotation['ocr']:
+            sentence = sentence + "[SEP]" + ocr['text']
+
+        masked_input_ids, mlm_labels, mask = self.proc_text(sentence)
         is_matched = torch.tensor(is_matched, dtype=torch.long)
 
         data = dict(

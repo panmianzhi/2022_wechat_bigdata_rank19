@@ -119,7 +119,12 @@ class MultiModalDataset(Dataset):
         frame_input, frame_mask = self.get_visual_feats(worker_info.id, idx) # [max_frame, feat_dim], [max_frame]
 
         # Step 2, load title tokens
-        title_input, title_mask = self.tokenize_text(self.anns[idx]['title'])
+        annotation = self.anns[idx]
+        sentence = annotation['title'] + '[SEP]' + annotation['asr']
+        for ocr in annotation['ocr']:
+            sentence = sentence + "[SEP]" + ocr['text']
+
+        title_input, title_mask = self.tokenize_text(sentence)
 
         # Step 3, summarize into a dictionary
         data = dict(

@@ -30,7 +30,6 @@ from io import open
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
 from .file_utils import cached_path
 
