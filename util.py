@@ -67,13 +67,3 @@ def evaluate(predictions, labels):
     return eval_results
 
 
-def find_gpus(nums=4):
-    os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >~/.tmp_free_gpus') # If there is no ~ in the path, return the path unchanged
-    with open(os.path.expanduser ('~/.tmp_free_gpus') , 'r') as lines_txt:
-        frees = lines_txt.readlines()
-        idx_freeMemory_pair = [ (idx,int(x.split()[2])) for idx,x in enumerate(frees) ]
-    idx_freeMemory_pair.sort(key=lambda my_tuple:my_tuple[1],reverse=True)
-    usingGPUs = [str(idx_memory_pair[0]) for idx_memory_pair in idx_freeMemory_pair[:nums]]
-    usingGPUs = ','.join(usingGPUs)
-    print(f'using GPU idx: #{usingGPUs}')
-    return usingGPUs

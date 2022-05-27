@@ -58,6 +58,7 @@ class LXRTDataset(Dataset):
                  ann_paths: List[str],
                  labeled_zip_feats: str,
                  unlabeled_zip_feats: str):
+        self.args = args
         self.max_frame = args.max_frames # 32
         self.bert_seq_length = args.bert_seq_length # 50
 
@@ -90,9 +91,10 @@ class LXRTDataset(Dataset):
             annotation = self.anns[random.randint(0, len(self.anns) - 1)]
             is_matched = 0
 
-        sentence = annotation['title'] + "[SEP]" + annotation['asr']
-        for ocr in annotation['ocr']:
-            sentence = sentence + "[SEP]" + ocr['text']
+        # sentence = annotation['title'] + "[SEP]" + annotation['asr']
+        # for ocr in annotation['ocr']:
+        #     sentence = sentence + "[SEP]" + ocr['text']
+        sentence = annotation['title']
 
         masked_input_ids, mlm_labels, mask = self.proc_text(sentence)
         is_matched = torch.tensor(is_matched, dtype=torch.long)
@@ -161,7 +163,7 @@ class LXRTDataset(Dataset):
         return masked_input_ids, mlm_labels, mask
 
     def proc_visual_feats(self, worker_id, feat, mask) -> tuple:
-        mask_feat, feat_mask_label = self.random_feat(worker_id, feat)
+        mask_feat, feat_mask_label = self.random_feat(worker_id=worker_id, feats=feat)
 
         mask_feat = torch.FloatTensor(mask_feat)
         origin_feat = torch.FloatTensor(feat)
@@ -187,8 +189,8 @@ class LXRTDataset(Dataset):
 
             else:
                 prob = random.random()
-                if prob < 0.15: # 15%
-                    prob /= 0.15
+                if prob < self.args.mask_ratio: # 15%
+                    prob /= self.args.mask_ratio
                     if prob < 0.8: # mask
                         token_ids[i] = self.tokenizer.vocab["[MASK]"]
                     elif prob < 0.9: # random replace
@@ -212,8 +214,10 @@ class LXRTDataset(Dataset):
         feat_mask_label = np.zeros(len(feats), dtype=np.float32)
         for i in range(len(feats)):
             prob = random.random()
-            if prob < 0.15:
-                prob /= 0.15
+            if prob < self.args.mask_ratio:
+                mask_feats[i, :] = 0.
+                '''
+                prob /= args.mask_ratio
                 if prob < 0.8: # mask
                     mask_feats[i, :] = 0.
                 elif prob < 0.9: # random replace
@@ -221,7 +225,7 @@ class LXRTDataset(Dataset):
                     rand_idx = random.randint(0, len(self.anns) - 1)
                     rand_feats, _ = self.get_visual_feats(worker_id, rand_idx)
                     mask_feats[i, :] = rand_feats[random.randint(0,31)]
-
+                '''
                 feat_mask_label[i] = 1.
 
         return mask_feats, feat_mask_label

@@ -1,13 +1,13 @@
 import os
 from config import args
-from util import find_gpus
-os.environ['CUDA_VISIBLE_DEVICES'] = find_gpus(nums=args.num_gpus) # 必须在import torch前面
 
 import logging
 import time
 import torch
 import torch.nn as nn
-from models.finetune_model import ClassificationModel
+from models.finetune_model import ClassificationModel, FinetuneUniterModel
+from tricks.FGM import FGM
+from tricks.EMA import EMA
 from data.category_id_map import CATEGORY_ID_LIST
 from data.data_helper import create_dataloaders
 from util import setup_seed, setup_logging, build_optimizer, evaluate
@@ -38,16 +38,27 @@ def validate(model, val_dataloader):
 def train_and_validate():
     train_dataloader, val_dataloader = create_dataloaders(args)
 
-    model = ClassificationModel(len(CATEGORY_ID_LIST)).cuda()
-    restore_checkpoint(model, args.ckpt_file)
+    # model = ClassificationModel(len(CATEGORY_ID_LIST)).cuda()
+    model = FinetuneUniterModel(len(CATEGORY_ID_LIST)).cuda() # we use single-stream model
+
+    if args.ckpt_file is not None:
+        restore_checkpoint(model, args.ckpt_file)
     optimizer, scheduler = build_optimizer(args, model)
     if args.num_gpus > 1:
         model = nn.DataParallel(model)
 
     step = 0
     best_score = args.best_score
+    best_loss = args.best_loss
     start_time = time.time()
     num_total_steps = len(train_dataloader) * args.max_epochs
+
+    '''
+    ema = EMA(model, 0.999)
+    ema.register()
+    '''
+
+    # fgm = FGM(model)
     for epoch in range(args.max_epochs):
         for batch in train_dataloader:
             model.train()
@@ -59,12 +70,42 @@ def train_and_validate():
             loss = loss.mean()
             accuracy = accuracy.mean()
             loss.backward()
+
+            '''
+            fgm.attack()
+            loss_adv, _, _, _ = model(input_ids=batch['title_input'].cuda(),
+                                      attention_mask=batch['title_mask'].cuda(),
+                                      visual_feats=batch['frame_input'].cuda(),
+                                      visual_attention_mask=batch['frame_mask'].cuda(),
+                                      category_label=batch['label'].cuda())
+            loss_adv = loss_adv.mean()
+            loss_adv.backward()
+            fgm.restore()
+            '''
+
             optimizer.step()
+            # ema.update()
             optimizer.zero_grad()
             scheduler.step()
 
             step += 1
-            if step % args.print_steps == 0:
+            if step % args.print_steps == 0:# apply ema
+                '''
+                ema.apply_shadow()
+                val_loss, val_results = validate(model, val_dataloader)
+                val_mean_f1 = val_results['mean_f1']
+                if val_loss < best_loss:
+                    logging.info(f'ema, best f1 is {val_mean_f1}')
+                    best_loss = val_loss
+                    if args.num_gpus > 1:
+                        torch.save({'model_state_dict': model.module.state_dict(), 'mean_f1': val_mean_f1},
+                                   f'{args.savedmodel_path}/best_ema.bin')
+                    else:
+                        torch.save({'model_state_dict': model.state_dict(), 'mean_f1': val_mean_f1},
+                                   f'{args.savedmodel_path}/best_ema.bin')
+                ema.restore()
+                '''
+
                 time_per_step = (time.time() - start_time) / max(1, step)
                 remaining_time = time_per_step * (num_total_steps - step)
                 remaining_time = time.strftime('%H:%M:%S', time.gmtime(remaining_time))
@@ -75,7 +116,6 @@ def train_and_validate():
         results = {k: round(v, 4) for k, v in results.items()}
         logging.info(f"Epoch {epoch} step {step}: loss {loss:.3f}, {results}")
 
-        # 5. save checkpoint
         mean_f1 = results['mean_f1']
         if mean_f1 > best_score:
             best_score = mean_f1

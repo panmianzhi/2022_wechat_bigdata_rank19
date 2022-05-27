@@ -1,14 +1,10 @@
-import os
-from util import find_gpus
-os.environ['CUDA_VISIBLE_DEVICES'] = find_gpus(nums=1) # 必须在import torch前面
-
 import torch
 from torch.utils.data import SequentialSampler, DataLoader
 
 from config import args
 from data.data_helper import MultiModalDataset
 from data.category_id_map import lv2id_to_category_id, CATEGORY_ID_LIST
-from models.finetune_model import ClassificationModel
+from models.finetune_model import ClassificationModel, FinetuneUniterModel
 
 
 def inference():
@@ -24,11 +20,12 @@ def inference():
                             #prefetch_factor=args.prefetch)
 
     # 2. load model
-    model = ClassificationModel(len(CATEGORY_ID_LIST))
+    model = ClassificationModel(len(CATEGORY_ID_LIST)).cuda()
+    # model = FinetuneUniterModel(len(CATEGORY_ID_LIST)).cuda()
     checkpoint = torch.load(f'{args.savedmodel_path}/{args.ckpt_file}', map_location='cpu')
     model.load_state_dict(checkpoint['model_state_dict'])
     if torch.cuda.is_available():
-        model = torch.nn.parallel.DataParallel(model.cuda())
+        model = torch.nn.parallel.DataParallel(model)
     model.eval()
 
     # 3. inference

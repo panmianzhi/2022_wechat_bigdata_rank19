@@ -23,8 +23,9 @@ def parse_args():
 
     # ======================== SavedModel Configs =========================
     parser.add_argument('--savedmodel_path', type=str, default='save/')
-    parser.add_argument('--ckpt_file', type=str, default='Epoch9')
+    parser.add_argument('--ckpt_file', type=str)
     parser.add_argument('--best_score', default=0.5, type=float, help='save checkpoint if mean_f1 > best_score')
+    parser.add_argument('--best_loss', default=100, type=float)
 
     # ========================= Learning Configs ==========================
     parser.add_argument('--max_epochs', type=int, default=10, help='How many epochs')
@@ -37,9 +38,9 @@ def parse_args():
     parser.add_argument("--adam_epsilon", default=1e-6, type=float, help="Epsilon for Adam optimizer.")
 
     # ========================== Title BERT =============================
-    parser.add_argument('--bert_dir', type=str, default='hfl/chinese-macbert-base')
+    parser.add_argument('--bert_dir', type=str, default='data/chinese-roberta-wwa-ext')
     parser.add_argument('--bert_cache', type=str, default='data/cache')
-    parser.add_argument('--bert_seq_length', type=int, default=80)
+    parser.add_argument('--bert_seq_length', type=int, default=50)
     parser.add_argument('--bert_learning_rate', type=float, default=3e-5)
     parser.add_argument('--bert_warmup_steps', type=int, default=5000)
     parser.add_argument('--bert_max_steps', type=int, default=30000)
@@ -60,6 +61,7 @@ def parse_args():
     parser.add_argument('--pretrain_lr', type=float, default=1e-4)
     parser.add_argument('--num_gpus', type=int, default=4)
     parser.add_argument('--from_scratch', action='store_true')
+    parser.add_argument('--mask_ratio', type=float, default=0.15)
     return parser.parse_args()
 
 args = parse_args()
