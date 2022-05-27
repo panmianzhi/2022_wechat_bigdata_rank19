@@ -49,14 +49,11 @@ def train_and_validate():
 
     step = 0
     best_score = args.best_score
-    best_loss = args.best_loss
     start_time = time.time()
     num_total_steps = len(train_dataloader) * args.max_epochs
 
-    '''
     ema = EMA(model, 0.999)
     ema.register()
-    '''
 
     # fgm = FGM(model)
     for epoch in range(args.max_epochs):
@@ -84,47 +81,36 @@ def train_and_validate():
             '''
 
             optimizer.step()
-            # ema.update()
+            ema.update()
             optimizer.zero_grad()
             scheduler.step()
 
             step += 1
-            if step % args.print_steps == 0:# apply ema
-                '''
-                ema.apply_shadow()
-                val_loss, val_results = validate(model, val_dataloader)
-                val_mean_f1 = val_results['mean_f1']
-                if val_loss < best_loss:
-                    logging.info(f'ema, best f1 is {val_mean_f1}')
-                    best_loss = val_loss
-                    if args.num_gpus > 1:
-                        torch.save({'model_state_dict': model.module.state_dict(), 'mean_f1': val_mean_f1},
-                                   f'{args.savedmodel_path}/best_ema.bin')
-                    else:
-                        torch.save({'model_state_dict': model.state_dict(), 'mean_f1': val_mean_f1},
-                                   f'{args.savedmodel_path}/best_ema.bin')
-                ema.restore()
-                '''
-
+            if step % args.print_steps == 0:
                 time_per_step = (time.time() - start_time) / max(1, step)
                 remaining_time = time_per_step * (num_total_steps - step)
                 remaining_time = time.strftime('%H:%M:%S', time.gmtime(remaining_time))
                 logging.info(f"Epoch {epoch} step {step} eta {remaining_time}: loss {loss:.3f}, accuracy {accuracy:.3f}")
 
-        # 4. validation
-        loss, results = validate(model, val_dataloader)
-        results = {k: round(v, 4) for k, v in results.items()}
-        logging.info(f"Epoch {epoch} step {step}: loss {loss:.3f}, {results}")
+            # 4. validation
+            if step % 500 == 0:
+                ema.apply_shadow()
 
-        mean_f1 = results['mean_f1']
-        if mean_f1 > best_score:
-            best_score = mean_f1
-            if args.num_gpus > 1:
-                torch.save({'epoch': epoch, 'model_state_dict': model.module.state_dict(), 'mean_f1': mean_f1},
-                       f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
-            else:
-                torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'mean_f1': mean_f1},
-                       f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
+                loss, results = validate(model, val_dataloader)
+                results = {k: round(v, 4) for k, v in results.items()}
+                logging.info(f"Epoch {epoch} step {step}: loss {loss:.3f}, {results}")
+
+                mean_f1 = results['mean_f1']
+                if mean_f1 > best_score:
+                    best_score = mean_f1
+                    if args.num_gpus > 1:
+                        torch.save({'epoch': epoch, 'model_state_dict': model.module.state_dict(), 'mean_f1': mean_f1},
+                               f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
+                    else:
+                        torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'mean_f1': mean_f1},
+                               f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
+
+                ema.restore()
 
 
 def restore_checkpoint(model_to_load, restore_name='BEST_EVAL_LOSS'):
