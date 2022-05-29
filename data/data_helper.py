@@ -26,14 +26,12 @@ def create_dataloaders(args):
                                   drop_last=True,
                                   pin_memory=True,
                                   num_workers=args.num_workers)
-                                  #prefetch_factor=args.prefetch)
     val_dataloader = DataLoader(val_dataset,
                                 batch_size=args.val_batch_size,
                                 sampler=val_sampler,
                                 drop_last=False,
                                 pin_memory=True,
                                 num_workers=args.num_workers)
-                                #prefetch_factor=args.prefetch)
     return train_dataloader, val_dataloader
 
 

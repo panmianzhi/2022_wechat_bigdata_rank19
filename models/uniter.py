@@ -611,9 +611,9 @@ class UniterImageEmbeddings(nn.Module):
 
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
 
-    def forward(self, img_feat, img_type_embeddings):
+    def forward(self, img_feat, img_type_embeddings, position_embeddings):
         transformed_im = self.img_layer_norm(self.img_linear(img_feat))
-        embeddings = transformed_im + img_type_embeddings
+        embeddings = transformed_im + img_type_embeddings + position_embeddings
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -653,7 +653,12 @@ class UniterModel(UniterPreTrainedModel):
         if img_type_ids is None:
             img_type_ids = torch.ones_like(img_feat[:, :, 0].long())
         img_type_embeddings = self.embeddings.token_type_embeddings(img_type_ids)
-        output = self.img_embeddings(img_feat, img_type_embeddings)
+
+        position_ids = torch.arange(img_feat.size(1), dtype=torch.long, device=img_feat.device)
+        position_ids = position_ids.repeat(img_feat.size(0), 1)
+        position_embedding = self.embeddings.position_embeddings(position_ids)
+
+        output = self.img_embeddings(img_feat, img_type_embeddings, position_embedding)
         return output
 
     def _compute_img_txt_embeddings(self, input_ids, img_feat):
@@ -682,7 +687,7 @@ class UniterPretraining(UniterPreTrainedModel):
                  task_mask_lm=True,
                  task_matched=True,
                  task_mrfr=True,
-                 task_contrastive=True):
+                 distill=True):
         super().__init__(config)
         # Configuration
         self.config = config
@@ -691,7 +696,7 @@ class UniterPretraining(UniterPreTrainedModel):
         self.task_mask_lm = task_mask_lm
         self.task_mrfr = task_mrfr
         self.task_matched = task_matched
-        self.task_contrastive = task_contrastive
+        self.distill = distill
 
         # LXRT backbone
         self.bert = UniterModel(config, img_dim=768)
@@ -700,6 +705,14 @@ class UniterPretraining(UniterPreTrainedModel):
         self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
         if self.task_mrfr:
             self.obj_predict_head = BertVisualObjHead(config, self.bert.img_embeddings.img_linear.weight)
+
+        if self.distill:
+            self.momentum = 0.999
+            self.bert_m = UniterModel(config, img_dim=768)
+            self.cls_m = BertPreTrainingHeads(config, self.bert_m.embeddings.word_embeddings.weight)
+            self.model_pairs = [[self.bert, self.bert_m],
+                                [self.cls, self.cls_m]]
+            self.copy_params()
 
         # Weight initialization
         self.apply(self.init_bert_weights)
@@ -730,12 +743,24 @@ class UniterPretraining(UniterPreTrainedModel):
         total_loss = 0.
         losses = ()
         if masked_lm_labels is not None and self.task_mask_lm:
-            masked_lm_loss = F.cross_entropy(lang_prediction_scores, masked_lm_labels[masked_lm_labels != -1], reduction='mean') * 0.4
+            masked_lm_loss = F.cross_entropy(lang_prediction_scores, masked_lm_labels[masked_lm_labels != -1], reduction='mean')
+            if self.distill:
+                with torch.no_grad():
+                    self._momentum_update()
+                    sequence_output_m, _ = self.bert_m(input_ids, visual_feats, attention_mask, visual_mask)
+                    lang_output_m, _ = torch.split(sequence_output_m, [args.bert_seq_length, 32], dim=1)
+                    lang_output_masked_m = self._compute_masked_hidden(lang_output_m, masked_lm_labels != -1)
+                    lang_prediction_scores_m = self.cls_m.predictions(lang_output_masked_m)
+
+                loss_distill = -torch.sum(
+                    F.log_softmax(lang_prediction_scores, dim=-1) * F.softmax(lang_prediction_scores_m, dim=-1), dim=-1).mean()
+                masked_lm_loss = 0.6 * masked_lm_loss + 0.4 * loss_distill
+
             total_loss += masked_lm_loss
             losses += (masked_lm_loss.detach(),)
 
         if matched_label is not None and self.task_matched:
-            matched_loss = F.cross_entropy(cross_relationship_score, matched_label, reduction='mean') * 0.5
+            matched_loss = F.cross_entropy(cross_relationship_score, matched_label, reduction='mean')
             total_loss += matched_loss
             losses += (matched_loss.detach(),)
 
@@ -743,8 +768,21 @@ class UniterPretraining(UniterPreTrainedModel):
             visn_output_masked = self._compute_masked_hidden(visn_output, feat_mask_label == 1)
             pred_visual_feat = self.obj_predict_head(visn_output_masked)
             origin_feat_masked = self._compute_masked_hidden(origin_feat, feat_mask_label == 1)
-            visn_loss = F.smooth_l1_loss(pred_visual_feat, origin_feat_masked, reduction='mean') * 0.1
+            visn_loss = F.smooth_l1_loss(pred_visual_feat, origin_feat_masked, reduction='mean')
             total_loss += visn_loss
-            losses += (visn_loss,)
+            losses += (visn_loss.detach(),)
 
         return total_loss, torch.stack(losses).unsqueeze(0)
+
+    @torch.no_grad()
+    def copy_params(self):
+        for model_pair in self.model_pairs:
+            for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters()):
+                param_m.data.copy_(param.data) # initialize
+                param_m.requires_grad = False # not update by gradient
+
+    @torch.no_grad()
+    def _momentum_update(self):
+        for model_pair in self.model_pairs:
+            for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters()):
+                param_m.data = param_m.data * self.momentum + param.data * (1. - self.momentum)

@@ -5,7 +5,7 @@ import logging
 import time
 import torch
 import torch.nn as nn
-from models.finetune_model import ClassificationModel, FinetuneUniterModel
+from models.finetune_model import FinetuneUniterModel
 from tricks.FGM import FGM
 from tricks.EMA import EMA
 from data.category_id_map import CATEGORY_ID_LIST
@@ -38,7 +38,6 @@ def validate(model, val_dataloader):
 def train_and_validate():
     train_dataloader, val_dataloader = create_dataloaders(args)
 
-    # model = ClassificationModel(len(CATEGORY_ID_LIST)).cuda()
     model = FinetuneUniterModel(len(CATEGORY_ID_LIST)).cuda() # we use single-stream model
 
     if args.ckpt_file is not None:
@@ -93,7 +92,7 @@ def train_and_validate():
                 logging.info(f"Epoch {epoch} step {step} eta {remaining_time}: loss {loss:.3f}, accuracy {accuracy:.3f}")
 
             # 4. validation
-            if step % 500 == 0:
+            if step % args.val_steps == 0:
                 ema.apply_shadow()
 
                 loss, results = validate(model, val_dataloader)
@@ -105,10 +104,10 @@ def train_and_validate():
                     best_score = mean_f1
                     if args.num_gpus > 1:
                         torch.save({'epoch': epoch, 'model_state_dict': model.module.state_dict(), 'mean_f1': mean_f1},
-                               f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
+                               f'{args.savedmodel_path}/{args.ckpt_file}_epoch_{epoch}_mean_f1_{mean_f1}.bin')
                     else:
                         torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'mean_f1': mean_f1},
-                               f'{args.savedmodel_path}/model_epoch_{epoch}_mean_f1_{mean_f1}.bin')
+                               f'{args.savedmodel_path}/{args.ckpt_file}_epoch_{epoch}_mean_f1_{mean_f1}.bin')
 
                 ema.restore()
 

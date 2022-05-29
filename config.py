@@ -36,6 +36,7 @@ def parse_args():
     parser.add_argument('--learning_rate', default=5e-5, type=float, help='initial learning rate')
     parser.add_argument("--weight_decay", default=0.01, type=float, help="Weight deay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-6, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument('--val_steps', default=500, type=int)
 
     # ========================== Title BERT =============================
     parser.add_argument('--bert_dir', type=str, default='data/chinese-roberta-wwa-ext')
