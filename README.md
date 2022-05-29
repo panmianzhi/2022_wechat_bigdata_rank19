@@ -9,7 +9,7 @@
 |-- evaluate.py
 |-- finetune.py # 微调
 |-- inference.py # 生成最终结果文件代码
-|-- lxrt_pretrain.sh
+|-- lxrt_pretrain.sh # 预训练脚本
 |-- models
 |   |-- baseline_model.py 
 |   |-- file_utils.py 
@@ -18,7 +18,7 @@
 |   |-- optimization.py # 预训练阶段的优化器BertAdam
 |   |-- uniter.py # 单流模型
 |-- pretrain.py # 预训练
-|-- run_finetune.sh # 微调预训脚本
+|-- run_finetune.sh # 微调脚本
 |-- save # 保存checkpoint
 |-- tricks
 |   |-- EMA.py
