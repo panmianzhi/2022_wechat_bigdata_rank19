@@ -70,9 +70,14 @@ class FinetuneUniterModel(nn.Module):
     def forward(self, input_ids, token_type_ids=None, attention_mask=None,
                 visual_feats=None, visual_attention_mask=None,
                 category_label=None, inference=False):
-        _, pooled_output = self.bert(
+        sequence_output, pooled_output = self.bert(
             input_ids, visual_feats, attention_mask, visual_attention_mask
         )
+
+        # mean_output = self.mean_pooling(sequence_output, torch.cat([attention_mask, visual_attention_mask], dim=1))
+        # assert mean_output.dim() == 2
+
+        # logit = self.logit_fc(mean_output)
         logit = self.logit_fc(pooled_output) # [B, cat_len]
 
         if inference:
@@ -90,6 +95,15 @@ class FinetuneUniterModel(nn.Module):
             pred_label_id = torch.argmax(prediction, dim=1)
             accuracy = (label == pred_label_id).float().sum() / label.shape[0]
         return loss, accuracy, pred_label_id, label
+
+    def mean_pooling(self, seq_output, mask):
+        assert seq_output.size(1) == mask.size(1)
+
+        exp_mask = mask.unsqueeze(-1).float() # [b, n, 1]
+        sum_mask = torch.sum(mask, dim=1, keepdim=True, dtype=torch.float32) # [b,1]
+
+        sum_embedding = torch.sum(seq_output * exp_mask, dim=1, keepdim=False) # [b, h]
+        return sum_embedding / sum_mask
 
 
 class FocalLoss(nn.Module):

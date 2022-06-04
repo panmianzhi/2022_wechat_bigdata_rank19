@@ -35,7 +35,7 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-multilingual-cased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased.tar.gz",
     'bert-base-chinese': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
 }
-CONFIG_NAME = 'bert_config.json'
+CONFIG_NAME = 'config.json'
 WEIGHTS_NAME = 'pytorch_model.bin'
 TF_WEIGHTS_NAME = 'model.ckpt'
 
@@ -457,10 +457,10 @@ class UniterPreTrainedModel(nn.Module):
                     . `bert-base-multilingual-cased`
                     . `bert-base-chinese`
                 - a path or url to a pretrained model archive containing:
-                    . `bert_config.json` a configuration file for the model
+                    . `config.json` a configuration file for the model
                     . `pytorch_model.bin` a PyTorch dump of a BertForPreTraining instance
                 - a path or url to a pretrained model archive containing:
-                    . `bert_config.json` a configuration file for the model
+                    . `config.json` a configuration file for the model
                     . `model.chkpt` a TensorFlow checkpoint
             from_tf: should we load the weights from a locally saved TensorFlow checkpoint
             cache_dir: an optional path to a folder in which the pre-trained models will be cached.
@@ -614,6 +614,7 @@ class UniterImageEmbeddings(nn.Module):
     def forward(self, img_feat, img_type_embeddings, position_embeddings):
         transformed_im = self.img_layer_norm(self.img_linear(img_feat))
         embeddings = transformed_im + img_type_embeddings + position_embeddings
+#       embeddings = transformed_im + img_type_embeddings
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -687,7 +688,7 @@ class UniterPretraining(UniterPreTrainedModel):
                  task_mask_lm=True,
                  task_matched=True,
                  task_mrfr=True,
-                 distill=True):
+                 distill=False):
         super().__init__(config)
         # Configuration
         self.config = config
@@ -740,10 +741,10 @@ class UniterPretraining(UniterPreTrainedModel):
         lang_output_masked = self._compute_masked_hidden(lang_output, masked_lm_labels != -1)
         lang_prediction_scores, cross_relationship_score = self.cls(lang_output_masked, pooled_output)
 
-        total_loss = 0.
+        total_loss = 0.# origin {4,5,1}
         losses = ()
         if masked_lm_labels is not None and self.task_mask_lm:
-            masked_lm_loss = F.cross_entropy(lang_prediction_scores, masked_lm_labels[masked_lm_labels != -1], reduction='mean')
+            masked_lm_loss = F.cross_entropy(lang_prediction_scores, masked_lm_labels[masked_lm_labels != -1], reduction='mean') * 0.5
             if self.distill:
                 with torch.no_grad():
                     self._momentum_update()
@@ -760,7 +761,7 @@ class UniterPretraining(UniterPreTrainedModel):
             losses += (masked_lm_loss.detach(),)
 
         if matched_label is not None and self.task_matched:
-            matched_loss = F.cross_entropy(cross_relationship_score, matched_label, reduction='mean')
+            matched_loss = F.cross_entropy(cross_relationship_score, matched_label, reduction='mean') * 0.3
             total_loss += matched_loss
             losses += (matched_loss.detach(),)
 
@@ -768,7 +769,7 @@ class UniterPretraining(UniterPreTrainedModel):
             visn_output_masked = self._compute_masked_hidden(visn_output, feat_mask_label == 1)
             pred_visual_feat = self.obj_predict_head(visn_output_masked)
             origin_feat_masked = self._compute_masked_hidden(origin_feat, feat_mask_label == 1)
-            visn_loss = F.smooth_l1_loss(pred_visual_feat, origin_feat_masked, reduction='mean')
+            visn_loss = F.smooth_l1_loss(pred_visual_feat, origin_feat_masked, reduction='mean') * 0.2
             total_loss += visn_loss
             losses += (visn_loss.detach(),)
 

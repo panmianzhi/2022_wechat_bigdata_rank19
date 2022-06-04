@@ -1,4 +1,5 @@
 import json
+import re
 import random
 import zipfile
 from io import BytesIO
@@ -91,10 +92,10 @@ class LXRTDataset(Dataset):
             annotation = self.anns[random.randint(0, len(self.anns) - 1)]
             is_matched = 0
 
-        # sentence = annotation['title'] + "[SEP]" + annotation['asr']
-        # for ocr in annotation['ocr']:
-        #     sentence = sentence + "[SEP]" + ocr['text']
-        sentence = annotation['title']
+        mean_seq_len = self.bert_seq_length // 3
+        sentence = annotation['title'][:mean_seq_len] + "[SEP]" + annotation['asr'][:mean_seq_len]
+        for ocr in annotation['ocr']:
+            sentence = sentence + "[SEP]" + ocr['text']
 
         masked_input_ids, mlm_labels, mask = self.proc_text(sentence)
         is_matched = torch.tensor(is_matched, dtype=torch.long)
@@ -184,7 +185,7 @@ class LXRTDataset(Dataset):
         '''
         mlm_label = []
         for i, token_id in enumerate(token_ids):
-            if token_id == 0 or token_id == 101 or token_id == 102:
+            if token_id == 0 or token_id == 101 or token_id == 102 or not is_cn(self.tokenizer.decode(token_id)):
                 mlm_label.append(-1)
 
             else:
@@ -229,3 +230,7 @@ class LXRTDataset(Dataset):
                 feat_mask_label[i] = 1.
 
         return mask_feats, feat_mask_label
+
+
+def is_cn(c):
+    return '\u4e00' <= c <= '\u9fa5'

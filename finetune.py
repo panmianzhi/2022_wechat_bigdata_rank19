@@ -54,7 +54,7 @@ def train_and_validate():
     ema = EMA(model, 0.999)
     ema.register()
 
-    # fgm = FGM(model)
+    fgm = FGM(model)
     for epoch in range(args.max_epochs):
         for batch in train_dataloader:
             model.train()
@@ -67,7 +67,6 @@ def train_and_validate():
             accuracy = accuracy.mean()
             loss.backward()
 
-            '''
             fgm.attack()
             loss_adv, _, _, _ = model(input_ids=batch['title_input'].cuda(),
                                       attention_mask=batch['title_mask'].cuda(),
@@ -77,7 +76,6 @@ def train_and_validate():
             loss_adv = loss_adv.mean()
             loss_adv.backward()
             fgm.restore()
-            '''
 
             optimizer.step()
             ema.update()

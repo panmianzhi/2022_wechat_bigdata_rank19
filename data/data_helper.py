@@ -118,7 +118,8 @@ class MultiModalDataset(Dataset):
 
         # Step 2, load title tokens
         annotation = self.anns[idx]
-        sentence = annotation['title'] + '[SEP]' + annotation['asr']
+
+        sentence = annotation['title'] + "[SEP]" + annotation['asr']
         for ocr in annotation['ocr']:
             sentence = sentence + "[SEP]" + ocr['text']
 
