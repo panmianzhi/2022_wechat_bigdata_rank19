@@ -62,48 +62,41 @@ class FinetuneUniterModel(nn.Module):
         self.logit_fc = nn.Sequential(
             nn.Linear(hid_dim, hid_dim * 2),
             GeLU(),
-            BertLayerNorm(hid_dim * 2, eps=1e-12),
-            nn.Linear(hid_dim * 2, num_class)
+            BertLayerNorm(hid_dim  * 2, eps=1e-12),
+            nn.Linear(hid_dim  * 2, num_class)
         )
         self.logit_fc.apply(self.bert.init_bert_weights)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None,
                 visual_feats=None, visual_attention_mask=None,
                 category_label=None, inference=False):
-        sequence_output, pooled_output = self.bert(
-            input_ids, visual_feats, attention_mask, visual_attention_mask
-        )
+        last_hidden_states, cls_hidden_states = self.bert(
+            input_ids, visual_feats, attention_mask, visual_attention_mask)
 
-        # mean_output = self.mean_pooling(sequence_output, torch.cat([attention_mask, visual_attention_mask], dim=1))
-        # assert mean_output.dim() == 2
+#         # mask
+#         attention_mask_total =  torch.cat([attention_mask, visual_attention_mask], dim=1)
+#         mean_pooling = (last_hidden_states * attention_mask_total.unsqueeze(-1)).sum(1) / attention_mask_total.sum(1).unsqueeze(-1)
+#         max_pooling = last_hidden_states + (1 - attention_mask_total).unsqueeze(-1) * (-1e10)
+#         max_pooling = max_pooling.max(1)[0].float()
 
-        # logit = self.logit_fc(mean_output)
-        logit = self.logit_fc(pooled_output) # [B, cat_len]
+#         pooled_output = torch.cat([max_pooling, mean_pooling,cls], dim=1)
+        logit = self.logit_fc(cls_hidden_states)
 
         if inference:
-            return torch.argmax(logit, dim=1)
+            return logit
+            #return torch.argmax(logit, dim=1)
         else:
             return self.cal_loss(logit, category_label)
 
     @staticmethod
     def cal_loss(prediction, label):
-        focal = FocalLoss(class_num=prediction.size(1))
         label = label.squeeze(dim=1)
-        #loss = F.cross_entropy(prediction, label)
-        loss = focal(prediction, label)
+        loss = F.cross_entropy(prediction, label)
         with torch.no_grad():
             pred_label_id = torch.argmax(prediction, dim=1)
             accuracy = (label == pred_label_id).float().sum() / label.shape[0]
         return loss, accuracy, pred_label_id, label
 
-    def mean_pooling(self, seq_output, mask):
-        assert seq_output.size(1) == mask.size(1)
-
-        exp_mask = mask.unsqueeze(-1).float() # [b, n, 1]
-        sum_mask = torch.sum(mask, dim=1, keepdim=True, dtype=torch.float32) # [b,1]
-
-        sum_embedding = torch.sum(seq_output * exp_mask, dim=1, keepdim=False) # [b, h]
-        return sum_embedding / sum_mask
 
 
 class FocalLoss(nn.Module):

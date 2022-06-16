@@ -1,5 +1,8 @@
+import os
+
 import torch
 from torch.utils.data import SequentialSampler, DataLoader
+import torch.nn.functional as F
 
 from config import args
 from data.data_helper import MultiModalDataset
@@ -17,11 +20,40 @@ def inference():
                             drop_last=False,
                             pin_memory=True,
                             num_workers=args.num_workers)
-                            #prefetch_factor=args.prefetch)
 
     # 2. load model
+    pred_logits = None
+    for ckpt_name in os.listdir(args.savedmodel_path):
+        if not ckpt_name.endswith('.bin'):
+            continue
+
+        factor = 1
+        if ckpt_name.startswith('mac'):
+            factor = 0.4
+        elif ckpt_name.startswith('nezha'):
+            factor = 0.325
+        else:
+            factor = 0.275
+
+        print(f'{ckpt_name} factor: {factor}')
+        if pred_logits is None:
+            pred_logits = factor * forward(dataloader, ckpt_name) # [n, 200]
+        else:
+            pred_logits += factor * forward(dataloader, ckpt_name)
+
+    predictions = torch.argmax(pred_logits, dim=1).cpu().tolist()
+
+    # 4. dump results
+    with open(args.test_output_csv, 'w') as f:
+        for pred_label_id, ann in zip(predictions, dataset.anns):
+            video_id = ann['id']
+            category_id = lv2id_to_category_id(pred_label_id)
+            f.write(f'{video_id},{category_id}\n')
+
+
+def forward(dataloader, ckpt_name):
     model = FinetuneUniterModel(len(CATEGORY_ID_LIST)).cuda()
-    checkpoint = torch.load(f'{args.savedmodel_path}/{args.ckpt_file}', map_location='cpu')
+    checkpoint = torch.load(f'{args.savedmodel_path}/{ckpt_name}', map_location='cpu')
     model.load_state_dict(checkpoint['model_state_dict'])
     if torch.cuda.is_available():
         model = torch.nn.parallel.DataParallel(model)
@@ -31,20 +63,15 @@ def inference():
     predictions = []
     with torch.no_grad():
         for batch in dataloader:
-            # remember to modify fine_model to return ids
-            pred_label_id = model(input_ids=batch['title_input'].cuda(),
+            logit = model(input_ids=batch['title_input'].cuda(),
                                   attention_mask=batch['title_mask'].cuda(),
                                   visual_feats=batch['frame_input'].cuda(),
                                   visual_attention_mask=batch['frame_mask'].cuda(),
                                   inference=True)
-            predictions.extend(pred_label_id.cpu().numpy())
+            predictions.append(logit)
 
-    # 4. dump results
-    with open(args.test_output_csv, 'w') as f:
-        for pred_label_id, ann in zip(predictions, dataset.anns):
-            video_id = ann['id']
-            category_id = lv2id_to_category_id(pred_label_id)
-            f.write(f'{video_id},{category_id}\n')
+    return torch.cat(predictions)
+
 
 
 if __name__ == '__main__':

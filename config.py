@@ -6,25 +6,28 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=2022, help="random seed.")
     parser.add_argument('--dropout', type=float, default=0.3, help='dropout ratio')
 
+    data_path = "/home/panmz/weixin_data"
+
     # ========================= Data Configs ==========================
-    parser.add_argument('--labeled_annotation', type=str, default='/home/data_ti6_d/panmz/weixin_data/annotations/labeled.json')
-    parser.add_argument('--unlabeled_annotation', type=str, default='/home/data_ti6_d/panmz/weixin_data/annotations/unlabeled.json')
-    parser.add_argument('--test_annotation', type=str, default='/home/data_ti6_d/panmz/weixin_data/annotations/test_a.json')
-    parser.add_argument('--labeled_zip_feats', type=str, default='/home/data_ti6_d/panmz/weixin_data/zip_feats/labeled.zip')
-    parser.add_argument('--unlabeled_zip_feats', type=str, default='/home/data_ti6_d/panmz/weixin_data/zip_feats/unlabeled.zip')
-    parser.add_argument('--test_zip_feats', type=str, default='/home/data_ti6_d/panmz/weixin_data/zip_feats/test_a.zip')
+    parser.add_argument('--labeled_annotation', type=str, default= data_path + '/annotations/labeled.json')
+    parser.add_argument('--unlabeled_annotation', type=str, default= data_path + '/annotations/unlabeled.json')
+    parser.add_argument('--test_annotation', type=str, default= data_path + '/annotations/test_a.json')
+    parser.add_argument('--labeled_zip_feats', type=str, default= data_path + '/zip_feats/labeled.zip')
+    parser.add_argument('--unlabeled_zip_feats', type=str, default= data_path + '/zip_feats/unlabeled.zip')
+    parser.add_argument('--test_zip_feats', type=str, default=data_path + '/zip_feats/test_a.zip')
     parser.add_argument('--test_output_csv', type=str, default='./data/result.csv')
     parser.add_argument('--val_ratio', default=0.1, type=float, help='split 10 percentages of training data as validation')
-    parser.add_argument('--batch_size', default=256, type=int, help="use for training duration per worker")
+    parser.add_argument('--batch_size', default=7, type=int, help="use for training duration per worker")
     parser.add_argument('--val_batch_size', default=256, type=int, help="use for validation duration per worker")
     parser.add_argument('--test_batch_size', default=256, type=int, help="use for testing duration per worker")
     parser.add_argument('--prefetch', default=16, type=int, help="use for training duration per worker")
     parser.add_argument('--num_workers', default=4, type=int, help="num_workers for dataloaders")
 
     # ======================== SavedModel Configs =========================
-    parser.add_argument('--savedmodel_path', type=str, default='save/')
-    parser.add_argument('--ckpt_file', type=str)
-    parser.add_argument('--best_score', default=0.5, type=float, help='save checkpoint if mean_f1 > best_score')
+    parser.add_argument('--savedmodel_path', type=str, default='./save/')
+    parser.add_argument('--pretrain_model_path', type=str, default='./save/3_Epoch39.pth')
+    parser.add_argument('--ckpt_file', type=str, default="title_asr_ocr_Epoch39_mean_max_pool_epoch_3_mean_f1_0.6886.bin")
+    parser.add_argument('--best_score', default=0.6, type=float, help='save checkpoint if mean_f1 > best_score')
     parser.add_argument('--best_loss', default=100, type=float)
 
     # ========================= Learning Configs ==========================
@@ -39,9 +42,8 @@ def parse_args():
     parser.add_argument('--val_steps', default=500, type=int)
 
     # ========================== Title BERT =============================
-    parser.add_argument('--bert_dir', type=str, default='data/chinese-roberta-wwa-ext')
-    parser.add_argument('--bert_cache', type=str, default='data/cache')
-    parser.add_argument('--bert_seq_length', type=int, default=50)
+    parser.add_argument('--bert_dir', type=str, default='./data/chinese-roberta-wwm-ext')
+    parser.add_argument('--bert_seq_length', type=int, default=128)
     parser.add_argument('--bert_learning_rate', type=float, default=3e-5)
     parser.add_argument('--bert_warmup_steps', type=int, default=5000)
     parser.add_argument('--bert_max_steps', type=int, default=30000)
@@ -60,7 +62,7 @@ def parse_args():
 
     # ========================== Pretrain =================================
     parser.add_argument('--pretrain_lr', type=float, default=1e-4)
-    parser.add_argument('--num_gpus', type=int, default=4)
+    parser.add_argument('--num_gpus', type=int, default=2)
     parser.add_argument('--from_scratch', action='store_true')
     parser.add_argument('--mask_ratio', type=float, default=0.15)
     return parser.parse_args()

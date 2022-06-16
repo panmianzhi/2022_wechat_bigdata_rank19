@@ -66,7 +66,7 @@ class MultiModalDataset(Dataset):
             self.anns = json.load(f)
 
         # initialize the text tokenizer
-        self.tokenizer = BertTokenizer.from_pretrained(args.bert_dir, use_fast=True, cache_dir=args.bert_cache)
+        self.tokenizer = BertTokenizer.from_pretrained(args.bert_dir, use_fast=True)
 
     def __len__(self) -> int:
         return len(self.anns)
@@ -118,8 +118,7 @@ class MultiModalDataset(Dataset):
 
         # Step 2, load title tokens
         annotation = self.anns[idx]
-
-        sentence = annotation['title'] + "[SEP]" + annotation['asr']
+        sentence = annotation['title'] + '[SEP]' + annotation['asr']
         for ocr in annotation['ocr']:
             sentence = sentence + "[SEP]" + ocr['text']
 

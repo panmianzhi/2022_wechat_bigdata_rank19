@@ -1,5 +1,4 @@
 import json
-import re
 import random
 import zipfile
 from io import BytesIO
@@ -29,14 +28,12 @@ def create_dataloaders(args):
                                   drop_last=True,
                                   pin_memory=True,
                                   num_workers=args.num_workers)
-                                  #prefetch_factor=args.prefetch)
     val_dataloader = DataLoader(val_dataset,
                                 batch_size=args.val_batch_size,
                                 sampler=val_sampler,
                                 drop_last=False,
                                 pin_memory=True,
                                 num_workers=args.num_workers)
-                                #prefetch_factor=args.prefetch)
     return train_dataloader, val_dataloader
 
 
@@ -75,7 +72,7 @@ class LXRTDataset(Dataset):
                 self.anns.extend(json.load(f))
 
         # initialize the text tokenizer
-        self.tokenizer = BertTokenizer.from_pretrained(args.bert_dir, use_fast=True, cache_dir=args.bert_cache)
+        self.tokenizer = BertTokenizer.from_pretrained(args.bert_dir, use_fast=True)
 
     def __len__(self) -> int:
         return len(self.anns)
@@ -92,8 +89,7 @@ class LXRTDataset(Dataset):
             annotation = self.anns[random.randint(0, len(self.anns) - 1)]
             is_matched = 0
 
-        mean_seq_len = self.bert_seq_length // 3
-        sentence = annotation['title'][:mean_seq_len] + "[SEP]" + annotation['asr'][:mean_seq_len]
+        sentence = annotation['title'] + "[SEP]" + annotation['asr']
         for ocr in annotation['ocr']:
             sentence = sentence + "[SEP]" + ocr['text']
 
@@ -149,8 +145,6 @@ class LXRTDataset(Dataset):
 
     def proc_text(self, text: str) -> tuple:
         encoded_inputs = self.tokenizer(text, max_length=self.bert_seq_length, padding='max_length', truncation=True)
-        # encoded_inputs:
-        # {'input_ids':[], 'token_type_ids':[], 'attention_mask':[]}
         masked_input_ids, mlm_labels = self.random_word(encoded_inputs['input_ids'])
 
         masked_input_ids = torch.LongTensor(masked_input_ids) # [101, ..., 102, 0, 0, ..., 0]
@@ -230,7 +224,6 @@ class LXRTDataset(Dataset):
                 feat_mask_label[i] = 1.
 
         return mask_feats, feat_mask_label
-
 
 def is_cn(c):
     return '\u4e00' <= c <= '\u9fa5'

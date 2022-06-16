@@ -1,16 +1,22 @@
 import os
+import json
 from config import args
 
 import logging
 import time
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader, SubsetRandomSampler, SequentialSampler
+from sklearn.model_selection import KFold
+
 from models.finetune_model import FinetuneUniterModel
 from tricks.FGM import FGM
 from tricks.EMA import EMA
 from data.category_id_map import CATEGORY_ID_LIST
-from data.data_helper import create_dataloaders
+from data.data_helper import MultiModalDataset
 from util import setup_seed, setup_logging, build_optimizer, evaluate
+
+
 
 def validate(model, val_dataloader):
     model.eval()
@@ -35,10 +41,7 @@ def validate(model, val_dataloader):
     return loss, results
 
 
-def train_and_validate():
-    train_dataloader, val_dataloader = create_dataloaders(args)
-    print(f'len train: {len(train_dataloader)}, len val: {len(val_dataloader)}')
-
+def train_and_validate(fold, train_dataloader, val_dataloader):
     model = FinetuneUniterModel(len(CATEGORY_ID_LIST)).cuda() # 加载bert
     if args.pretrain_model_path is not None: # 加载预训练
         print(args.pretrain_model_path)
@@ -92,7 +95,7 @@ def train_and_validate():
                 time_per_step = (time.time() - start_time) / max(1, step)
                 remaining_time = time_per_step * (num_total_steps - step)
                 remaining_time = time.strftime('%H:%M:%S', time.gmtime(remaining_time))
-                logging.info(f"Epoch {epoch} step {step} eta {remaining_time}: loss {loss:.3f}, accuracy {accuracy:.3f}")
+                logging.info(f"Fold {fold} Epoch {epoch} step {step} eta {remaining_time}: loss {loss:.3f}, accuracy {accuracy:.3f}")
 
             # 4. validation
             if step % args.val_steps == 0:
@@ -103,20 +106,46 @@ def train_and_validate():
                 logging.info("Val Done")
 
                 results = {k: round(v, 4) for k, v in results.items()}
-                logging.info(f"Epoch {epoch} step {step}: loss {loss:.3f}, {results}")
+                logging.info(f"Fold {fold} Epoch {epoch} step {step}: loss {loss:.3f}, {results}")
 
                 mean_f1 = results['mean_f1']
                 if mean_f1 > best_score:
                     best_score = mean_f1
                     if args.num_gpus > 1:
                         torch.save({'epoch': epoch, 'model_state_dict': model.module.state_dict(), 'mean_f1': mean_f1},
-                               f'{args.savedmodel_path}/epoch_{epoch}_mean_f1_{mean_f1}.bin')
+                               f'{args.savedmodel_path}/fold_{fold}_epoch_{epoch}_mean_f1_{mean_f1}.bin')
                     else:
                         torch.save({'epoch': epoch, 'model_state_dict': model.state_dict(), 'mean_f1': mean_f1},
-                               f'{args.savedmodel_path}/epoch_{epoch}_mean_f1_{mean_f1}.bin')
+                               f'{args.savedmodel_path}/fold_{fold}_epoch_{epoch}_mean_f1_{mean_f1}.bin')
 
                 ema.restore()
 
+
+def kfold_train_val(k=5):
+    dataset = MultiModalDataset(args, args.labeled_annotation, args.labeled_zip_feats)
+    kfold = KFold(n_splits=k, shuffle=True)
+
+    fold_val_id = {}
+    for fold, (train_ids, val_ids) in enumerate(kfold.split(dataset)):
+        fold_val_id[fold] = list(val_ids)
+        train_subsampler = SubsetRandomSampler(train_ids)
+        val_subsampler = SubsetRandomSampler(val_ids)
+        train_dataloader = DataLoader(dataset,
+                                      batch_size=args.batch_size,
+                                      sampler=train_subsampler,
+                                      drop_last=True,
+                                      pin_memory=True,
+                                      num_workers=args.num_workers)
+        val_dataloader = DataLoader(dataset,
+                                    batch_size=args.val_batch_size,
+                                    sampler=val_subsampler,
+                                    drop_last=False,
+                                    pin_memory=True,
+                                    num_workers=args.num_workers)
+        train_and_validate(fold, train_dataloader, val_dataloader)
+
+    with open('fold_val_id.json', 'w') as f:
+        json.dump(fold_val_id, f)
 
 def restore_checkpoint(model_to_load, restore_name='BEST_EVAL_LOSS'):
     restore_bin = str(f'{restore_name}')
@@ -137,13 +166,14 @@ def restore_checkpoint(model_to_load, restore_name='BEST_EVAL_LOSS'):
             pass
             logging.info(f"Part load failed: {name}")
 
+
 def main():
     setup_logging()
     setup_seed(args)
 
     os.makedirs(args.savedmodel_path, exist_ok=True)
     logging.info("Training/evaluation parameters: %s", args)
-    train_and_validate()
+    kfold_train_val(k=10)
 
 
 if __name__ == '__main__':

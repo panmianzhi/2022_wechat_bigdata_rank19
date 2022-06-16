@@ -2,7 +2,6 @@ import os
 import logging
 import torch
 import torch.nn as nn
-from models.lxrt import LXRTPretraining
 from models.uniter import UniterPretraining
 from models.optimization import BertAdam
 from data.lxrt_dataset import create_dataloaders
@@ -19,9 +18,6 @@ class PreTraining(object):
         print(args.__dict__)
 
         self.model = UniterPretraining.from_pretrained(args.bert_dir)
-        if args.from_scratch:
-            self.model.apply(self.model.init_bert_weights)
-
         if args.num_gpus > 1:
             self.model = nn.DataParallel(self.model.cuda())
 
@@ -89,7 +85,7 @@ class PreTraining(object):
             logging.info(losses_str)
 
             self.eval_epoch()
-            self.save(f'uniter_Epoch{epoch}', self.model)
+            self.save(f'uniter_Epoch{epoch}', self.model, optim)
 
     def eval_epoch(self):
         self.model.eval()
@@ -108,9 +104,10 @@ class PreTraining(object):
 
         return total_loss / len(self.eval_loader)
 
-    def save(self, name, model):
+    def save(self, name, model, optim):
         save_obj = {
-            'model': model.state_dict()
+            'model': model.state_dict(),
+            'optimizer': optim.state_dict(),
         }
         if os.path.exists(args.savedmodel_path):
             torch.save(save_obj, os.path.join(args.savedmodel_path, "%s.pth" % name))
