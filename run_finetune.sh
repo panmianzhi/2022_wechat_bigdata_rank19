@@ -1,9 +1,0 @@
-python finetune.py \
---bert_seq_length 128 \
---max_epochs 5 \
---batch_size 32 \
---val_batch_size 128 \
---bert_dir data/chinese-roberta-wwm-ext \
---num_gpus 1 \
---ckpt_file 3_Epoch9 \
---savedmodel_path save \

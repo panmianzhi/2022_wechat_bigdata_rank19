@@ -1,0 +1,1 @@
+python src/kfold_inference.py --savedmodel_path src/save/5fold/ 
